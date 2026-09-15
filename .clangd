@@ -1,0 +1,18 @@
+# Généré par Arduino VsCode IDE — ne pas modifier à la main.
+# Adapte la base de compilation d'arduino-cli à clang, qui ne partage
+# ni les options ni les extensions d'avr-gcc.
+CompileFlags:
+  Remove:
+    - -flto
+    - -fno-fat-lto-objects
+    - -ffat-lto-objects
+    - -fno-tree-scev-cprop
+    - -fno-devirtualize
+    - -mrelax
+    - -mcall-prologues
+    - -nodevicelib
+    - --param=*
+    - -MMD
+  Add:
+    - -Wno-unknown-attributes
+    - -Wno-#warnings

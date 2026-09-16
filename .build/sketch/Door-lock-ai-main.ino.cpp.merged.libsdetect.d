@@ -308,7 +308,7 @@ Door-lock-ai-main.ino.cpp.o: \
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/cores/esp32/esp32-hal-spi.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/User_Setup_Select.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/User_Setup.h \
- /Users/psl/Documents/Arduino/libraries/TFT_eSPI/TFT_Drivers/ILI9341_Defines.h \
+ /Users/psl/Documents/Arduino/libraries/TFT_eSPI/TFT_Drivers/ST7789_Defines.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Processors/TFT_eSPI_ESP32.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/soc/esp32/register/soc/spi_reg.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/hal/esp32/include/hal/gpio_ll.h \
@@ -384,7 +384,6 @@ Door-lock-ai-main.ino.cpp.o: \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Fonts/Custom/Roboto_Thin_24.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Fonts/Custom/Satisfy_24.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Fonts/Custom/Yellowtail_32.h \
- /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Touch.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Smooth_font.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Button.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Sprite.h \

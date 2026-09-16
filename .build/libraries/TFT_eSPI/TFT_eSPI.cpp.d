@@ -175,7 +175,7 @@
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/cores/esp32/esp32-hal-spi.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/User_Setup_Select.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/User_Setup.h \
- /Users/psl/Documents/Arduino/libraries/TFT_eSPI/TFT_Drivers/ILI9341_Defines.h \
+ /Users/psl/Documents/Arduino/libraries/TFT_eSPI/TFT_Drivers/ST7789_Defines.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Processors/TFT_eSPI_ESP32.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/soc/esp32/register/soc/spi_reg.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/esp_driver_spi/include/driver/spi_master.h \
@@ -258,14 +258,12 @@
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Fonts/Custom/Roboto_Thin_24.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Fonts/Custom/Satisfy_24.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Fonts/Custom/Yellowtail_32.h \
- /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Touch.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Smooth_font.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Button.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Sprite.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Processors/TFT_eSPI_ESP32.c \
- /Users/psl/Documents/Arduino/libraries/TFT_eSPI/TFT_Drivers/ILI9341_Init.h \
- /Users/psl/Documents/Arduino/libraries/TFT_eSPI/TFT_Drivers/ILI9341_Rotation.h \
- /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Touch.cpp \
+ /Users/psl/Documents/Arduino/libraries/TFT_eSPI/TFT_Drivers/ST7789_Init.h \
+ /Users/psl/Documents/Arduino/libraries/TFT_eSPI/TFT_Drivers/ST7789_Rotation.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Button.cpp \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Sprite.cpp \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Smooth_font.cpp

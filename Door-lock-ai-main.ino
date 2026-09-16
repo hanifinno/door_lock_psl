@@ -1,13 +1,15 @@
+#include "lgfx_CYD.hpp"
 #include <HTTPClient.h>
-#include <SPIFFS.h>
-#include <TFT_eSPI.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <time.h>
 
+LGFX tft;                // LovyanGFX object
+int currentRotation = 0; // 0: Portrait (USB down), 2: Portrait (USB up), 4/6: Portrait Mirrored, 1/3/5/7: Landscape
+
+// ================= WIFI =================
 const char *ssid = "HitchHiker";
 const char *password = "noc@pkcl";
-
 IPAddress local_IP(10, 81, 100, 72);
 IPAddress gateway(10, 81, 100, 1);
 IPAddress subnet(255, 255, 255, 0);
@@ -15,12 +17,11 @@ IPAddress dns(8, 8, 8, 8);
 
 WebServer server(80);
 
+// ================= PINS =================
 #define RELAY_PIN 22
 #define GREEN_LED 17
-#define BACKLIGHT_PIN 21
 
-TFT_eSPI tft = TFT_eSPI(320, 240); // Landscape force
-
+// ================= STATE =================
 const unsigned long UNLOCK_DURATION = 4000;
 unsigned long actionStart = 0;
 bool activeMode = false;
@@ -32,55 +33,23 @@ struct UnlockedUser {
   String name;
   unsigned long unlockTime;
 };
-
 const int MAX_RECENT = 10;
 UnlockedUser recentUsers[MAX_RECENT];
 int recentUserCount = 0;
 unsigned long SAME_PERSON_COOLDOWN = 20000;
 unsigned long lastAnonymousUnlock = 0;
 
-int findRecentUser(String empId, String name) {
-  for (int i = 0; i < recentUserCount; i++) {
-    if (empId.length() > 0 && recentUsers[i].empId == empId)
-      return i;
-    if (name.length() > 0 && recentUsers[i].name == name)
-      return i;
-  }
-  return -1;
-}
-
-void addOrUpdateRecentUser(String empId, String name, unsigned long uTime) {
-  int idx = findRecentUser(empId, name);
-  if (idx >= 0) {
-    recentUsers[idx].unlockTime = uTime;
-    if (name.length() > 0)
-      recentUsers[idx].name = name;
-    if (empId.length() > 0)
-      recentUsers[idx].empId = empId;
-    return;
-  }
-  if (recentUserCount < MAX_RECENT) {
-    recentUsers[recentUserCount++] = {empId, name, uTime};
-  } else {
-    int oldest = 0;
-    for (int i = 1; i < MAX_RECENT; i++) {
-      if (recentUsers[i].unlockTime < recentUsers[oldest].unlockTime)
-        oldest = i;
-    }
-    recentUsers[oldest] = {empId, name, uTime};
-  }
-}
-
+// ================= RELAY =================
 void openDoor() {
   digitalWrite(RELAY_PIN, LOW);
   digitalWrite(GREEN_LED, HIGH);
 }
-
 void closeDoor() {
   digitalWrite(RELAY_PIN, HIGH);
   digitalWrite(GREEN_LED, LOW);
 }
 
+// ================= TIME =================
 String getCurrentTime() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo, 10))
@@ -92,84 +61,199 @@ String getCurrentTime() {
 
 // ================= IDLE SCREEN =================
 void drawIdleScreen() {
+  tft.setRotation(currentRotation);
   tft.fillScreen(TFT_WHITE);
+  int w = tft.width();
 
-  // Header
-  tft.fillRect(0, 0, 320, 40, 0x0110);
-  tft.setTextColor(TFT_WHITE, 0x0110);
-  tft.setTextSize(2);
-  tft.drawCentreString("PAKIZA SOFTWARE LTD", 160, 8, 2);
+  if (w <= 240) {
+    // ======== FULL-SCREEN PORTRAIT (240 x 320) ========
+    // 1. Header Banner
+    tft.fillRect(0, 0, 240, 56, 0x0110);
+    tft.drawFastHLine(0, 55, 240, 0x039F);
+    tft.setTextColor(TFT_WHITE, 0x0110);
+    tft.setTextSize(2);
+    tft.drawCenterString("PAKIZA", 120, 10);
+    tft.setTextColor(0x5E3F, 0x0110);
+    tft.setTextSize(1);
+    tft.drawCenterString("SOFTWARE LTD", 120, 34);
 
-  // Card
-  tft.fillRoundRect(20, 50, 280, 145, 10, 0xF7BE);
-  tft.drawRoundRect(20, 50, 280, 145, 10, 0xC618);
+    // 2. Center Face Recognition Standby Card
+    tft.fillRoundRect(8, 64, 224, 196, 12, 0xF7BE);
+    tft.drawRoundRect(8, 64, 224, 196, 12, 0xC618);
 
-  // Circle
-  tft.drawCircle(160, 100, 32, 0x0110);
-  tft.drawCircle(160, 100, 31, 0x0110);
-  tft.fillCircle(160, 100, 6, TFT_GREEN);
+    // Camera circle target
+    int cx = 120, cy = 128;
+    tft.drawCircle(cx, cy, 34, 0x0110);
+    tft.drawCircle(cx, cy, 33, 0x0110);
+    tft.fillCircle(cx, cy, 6, TFT_GREEN);
 
-  tft.setTextColor(0x0110, 0xF7BE);
-  tft.setTextSize(2);
-  tft.drawCentreString("READY TO SCAN", 160, 145, 2);
-  tft.setTextColor(0x7BEF, 0xF7BE);
-  tft.setTextSize(1);
-  tft.drawCentreString("Please look at camera", 160, 170, 1);
+    // Corner brackets for facial scanner
+    tft.drawFastHLine(cx - 45, cy - 45, 18, 0x0110);
+    tft.drawFastVLine(cx - 45, cy - 45, 18, 0x0110);
+    tft.drawFastHLine(cx + 27, cy - 45, 18, 0x0110);
+    tft.drawFastVLine(cx + 45, cy - 45, 18, 0x0110);
+    tft.drawFastHLine(cx - 45, cy + 45, 18, 0x0110);
+    tft.drawFastVLine(cx - 45, cy + 27, 18, 0x0110);
+    tft.drawFastHLine(cx + 27, cy + 45, 18, 0x0110);
+    tft.drawFastVLine(cx + 45, cy + 27, 18, 0x0110);
 
-  // Footer
-  tft.fillRoundRect(20, 205, 280, 28, 6, 0x0110);
-  tft.fillCircle(35, 219, 4, TFT_GREEN);
-  tft.setTextColor(TFT_WHITE, 0x0110);
-  tft.setTextSize(1);
-  tft.drawString("SYSTEM ONLINE", 48, 214, 1);
-  tft.drawRightString(WiFi.localIP().toString(), 290, 214, 1);
+    tft.setTextColor(0x0110, 0xF7BE);
+    tft.setTextSize(2);
+    tft.drawCenterString("READY TO SCAN", 120, 185);
+
+    tft.setTextColor(0x7BEF, 0xF7BE);
+    tft.setTextSize(1);
+    tft.drawCenterString("Please look at camera", 120, 218);
+
+    // 3. Footer Banner: Online Status & IP
+    tft.fillRoundRect(8, 268, 224, 44, 8, 0x0110);
+    tft.fillCircle(22, 290, 4, TFT_GREEN);
+    tft.setTextColor(TFT_WHITE, 0x0110);
+    tft.setTextSize(1);
+    tft.drawString("SYSTEM ONLINE", 32, 285);
+    tft.setTextColor(0x5E3F, 0x0110);
+    tft.drawRightString(WiFi.localIP().toString(), 224, 285);
+  } else {
+    // ======== FULL-SCREEN LANDSCAPE (320 x 240) ========
+    // 1. Header
+    tft.fillRect(0, 0, 320, 42, 0x0110);
+    tft.drawFastHLine(0, 41, 320, 0x039F);
+    tft.setTextColor(TFT_WHITE, 0x0110);
+    tft.setTextSize(2);
+    tft.drawCenterString("PAKIZA SOFTWARE LTD", 160, 12);
+
+    // 2. Card (Edge-to-edge)
+    tft.fillRoundRect(8, 46, 304, 152, 10, 0xF7BE);
+    tft.drawRoundRect(8, 46, 304, 152, 10, 0xC618);
+
+    int cx = 160, cy = 96;
+    tft.drawCircle(cx, cy, 28, 0x0110);
+    tft.drawCircle(cx, cy, 27, 0x0110);
+    tft.fillCircle(cx, cy, 5, TFT_GREEN);
+
+    tft.setTextColor(0x0110, 0xF7BE);
+    tft.setTextSize(2);
+    tft.drawCenterString("READY TO SCAN", 160, 138);
+
+    tft.setTextColor(0x7BEF, 0xF7BE);
+    tft.setTextSize(1);
+    tft.drawCenterString("Please look at camera", 160, 166);
+
+    // 3. Footer (Edge-to-edge)
+    tft.fillRoundRect(8, 202, 304, 34, 6, 0x0110);
+    tft.fillCircle(22, 219, 4, TFT_GREEN);
+    tft.setTextColor(TFT_WHITE, 0x0110);
+    tft.setTextSize(1);
+    tft.drawString("SYSTEM ONLINE", 34, 214);
+    tft.drawRightString(WiFi.localIP().toString(), 302, 214);
+  }
 }
 
 // ================= ACCESS GRANTED =================
 void drawAccessCard(String name, String empId) {
+  tft.setRotation(currentRotation);
   tft.fillScreen(TFT_WHITE);
+  int w = tft.width();
 
-  // Header
-  tft.fillRect(0, 0, 320, 40, 0x0110);
-  tft.setTextColor(TFT_WHITE, 0x0110);
-  tft.setTextSize(2);
-  tft.drawCentreString("PAKIZA SOFTWARE LTD", 160, 8, 2);
-
-  // Green Card
-  tft.fillRoundRect(20, 48, 280, 160, 12, 0x01A0);
-  tft.drawRoundRect(20, 48, 280, 160, 12, TFT_GREEN);
-
-  // Title
-  tft.setTextColor(TFT_GREEN, 0x01A0);
-  tft.setTextSize(2);
-  tft.drawCentreString("ACCESS GRANTED", 160, 60, 2);
-
-  // Name
   String displayName =
       name.length() > 0 ? name
                         : (empId.length() > 0 ? "ID: " + empId : "AUTHORIZED");
-  tft.fillRoundRect(35, 95, 250, 28, 6, 0x00A0);
-  tft.setTextColor(TFT_WHITE, 0x00A0);
-  tft.setTextSize(2);
-  tft.drawCentreString(displayName, 160, 101, 1);
 
-  // ID
-  if (name.length() > 0 && empId.length() > 0) {
-    tft.fillRoundRect(35, 130, 250, 26, 6, 0x00A0);
-    tft.setTextColor(TFT_CYAN, 0x00A0);
+  if (w <= 240) {
+    // ======== FULL-SCREEN PORTRAIT (240 x 320) ========
+    // 1. Header
+    tft.fillRect(0, 0, 240, 56, 0x0110);
+    tft.drawFastHLine(0, 55, 240, TFT_GREEN);
+    tft.setTextColor(TFT_WHITE, 0x0110);
     tft.setTextSize(2);
-    tft.drawCentreString("ID: " + empId, 160, 135, 1);
+    tft.drawCenterString("PAKIZA", 120, 10);
+    tft.setTextColor(0x5E3F, 0x0110);
+    tft.setTextSize(1);
+    tft.drawCenterString("SOFTWARE LTD", 120, 34);
+
+    // 2. Green Access Card (Edge-to-Edge)
+    tft.fillRoundRect(8, 64, 224, 248, 12, 0x01A0);
+    tft.drawRoundRect(8, 64, 224, 248, 12, TFT_GREEN);
+
+    // Green OK badge
+    tft.fillCircle(120, 94, 20, TFT_GREEN);
+    tft.setTextColor(0x01A0, TFT_GREEN);
+    tft.setTextSize(2);
+    tft.drawCenterString("OK", 120, 86);
+
+    // Title
+    tft.setTextColor(TFT_GREEN, 0x01A0);
+    tft.setTextSize(2);
+    tft.drawCenterString("ACCESS GRANTED", 120, 124);
+
+    // Name Box
+    tft.fillRoundRect(16, 150, 208, 30, 6, 0x00A0);
+    tft.setTextColor(TFT_WHITE, 0x00A0);
+    tft.setTextSize(2);
+    tft.drawCenterString(displayName, 120, 157);
+
+    // ID Box
+    if (empId.length() > 0) {
+      tft.fillRoundRect(16, 188, 208, 28, 6, 0x00A0);
+      tft.setTextColor(TFT_CYAN, 0x00A0);
+      tft.setTextSize(2);
+      tft.drawCenterString("ID: " + empId, 120, 194);
+    }
+
+    // Time
+    tft.setTextColor(TFT_YELLOW, 0x01A0);
+    tft.setTextSize(2);
+    tft.drawCenterString("Time: " + getCurrentTime(), 120, 228);
+
+    // Status
+    tft.setTextColor(TFT_YELLOW, 0x01A0);
+    tft.setTextSize(1);
+    tft.drawCenterString("DOOR UNLOCKED", 120, 258);
+
+    // Status Accent Line
+    tft.fillRoundRect(24, 280, 192, 6, 3, TFT_GREEN);
+  } else {
+    // ======== FULL-SCREEN LANDSCAPE (320 x 240) ========
+    // 1. Header
+    tft.fillRect(0, 0, 320, 42, 0x0110);
+    tft.drawFastHLine(0, 41, 320, TFT_GREEN);
+    tft.setTextColor(TFT_WHITE, 0x0110);
+    tft.setTextSize(2);
+    tft.drawCenterString("PAKIZA SOFTWARE LTD", 160, 12);
+
+    // 2. Card (Edge-to-edge)
+    tft.fillRoundRect(8, 46, 304, 188, 10, 0x01A0);
+    tft.drawRoundRect(8, 46, 304, 188, 10, TFT_GREEN);
+
+    // Title
+    tft.setTextColor(TFT_GREEN, 0x01A0);
+    tft.setTextSize(2);
+    tft.drawCenterString("ACCESS GRANTED", 160, 56);
+
+    // Name
+    tft.fillRoundRect(16, 84, 288, 28, 6, 0x00A0);
+    tft.setTextColor(TFT_WHITE, 0x00A0);
+    tft.setTextSize(2);
+    tft.drawCenterString(displayName, 160, 90);
+
+    // ID
+    if (empId.length() > 0) {
+      tft.fillRoundRect(16, 118, 288, 26, 6, 0x00A0);
+      tft.setTextColor(TFT_CYAN, 0x00A0);
+      tft.setTextSize(2);
+      tft.drawCenterString("ID: " + empId, 160, 123);
+    }
+
+    // Time & Status
+    tft.setTextColor(TFT_YELLOW, 0x01A0);
+    tft.setTextSize(2);
+    tft.drawCenterString("Time: " + getCurrentTime(), 160, 154);
+
+    tft.setTextSize(1);
+    tft.drawCenterString("DOOR UNLOCKED", 160, 184);
+
+    tft.fillRoundRect(30, 214, 260, 4, 2, TFT_GREEN);
   }
-
-  // Time (Yellow on dark green)
-  tft.setTextColor(TFT_YELLOW, 0x01A0);
-  tft.setTextSize(2);
-  tft.drawCentreString("Time: " + getCurrentTime(), 160, 165, 1);
-
-  // Door status
-  tft.setTextColor(TFT_YELLOW, 0x01A0);
-  tft.setTextSize(1);
-  tft.drawCentreString("DOOR UNLOCKED", 160, 190, 2);
 }
 
 void enterIdle() {
@@ -180,6 +264,7 @@ void enterIdle() {
   currentName = "";
 }
 
+// ================= HELPERS =================
 String getNameFromRequest() {
   if (server.hasArg("name"))
     return server.arg("name");
@@ -231,6 +316,37 @@ String getIdFromRequest() {
   return "";
 }
 
+int findRecentUser(String empId, String name) {
+  for (int i = 0; i < recentUserCount; i++) {
+    if (empId.length() > 0 && recentUsers[i].empId == empId)
+      return i;
+    if (name.length() > 0 && recentUsers[i].name == name)
+      return i;
+  }
+  return -1;
+}
+
+void addOrUpdateRecentUser(String empId, String name, unsigned long uTime) {
+  int idx = findRecentUser(empId, name);
+  if (idx >= 0) {
+    recentUsers[idx].unlockTime = uTime;
+    if (name.length() > 0)
+      recentUsers[idx].name = name;
+    if (empId.length() > 0)
+      recentUsers[idx].empId = empId;
+    return;
+  }
+  if (recentUserCount < MAX_RECENT) {
+    recentUsers[recentUserCount++] = {empId, name, uTime};
+  } else {
+    int oldest = 0;
+    for (int i = 1; i < MAX_RECENT; i++)
+      if (recentUsers[i].unlockTime < recentUsers[oldest].unlockTime)
+        oldest = i;
+    recentUsers[oldest] = {empId, name, uTime};
+  }
+}
+
 void processUnlockRequest(const char *source) {
   String empId = getIdFromRequest();
   String name = getNameFromRequest();
@@ -251,10 +367,8 @@ void processUnlockRequest(const char *source) {
 
   int userIdx = findRecentUser(empId, name);
   bool isOnCooldown = false;
-  unsigned long timeSince = 0;
   if (userIdx >= 0) {
-    timeSince = millis() - recentUsers[userIdx].unlockTime;
-    if (timeSince < SAME_PERSON_COOLDOWN)
+    if (millis() - recentUsers[userIdx].unlockTime < SAME_PERSON_COOLDOWN)
       isOnCooldown = true;
   }
 
@@ -294,14 +408,31 @@ void processUnlockRequest(const char *source) {
 
 void handleOn() { processUnlockRequest("/on"); }
 void handleSilent() { processUnlockRequest("/silent"); }
+void handleRotation() {
+  if (server.hasArg("r")) {
+    currentRotation = server.arg("r").toInt();
+  }
+  tft.setRotation(currentRotation);
+  if (activeMode) {
+    drawAccessCard(currentName, currentEmpId);
+  } else {
+    drawIdleScreen();
+  }
+  String resp = "OK: Rotation set to " + String(currentRotation) +
+                " (Width: " + String(tft.width()) +
+                ", Height: " + String(tft.height()) + ")";
+  server.send(200, "text/plain", resp);
+}
 
 void setup() {
   Serial.begin(115200);
 
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(GREEN_LED, OUTPUT);
-  pinMode(BACKLIGHT_PIN, OUTPUT);
-  digitalWrite(BACKLIGHT_PIN, LOW);
+
+  // Turn ON Backlight (Active-LOW on CYD)
+  pinMode(21, OUTPUT);
+  digitalWrite(21, LOW);
   pinMode(27, OUTPUT);
   digitalWrite(27, HIGH);
   pinMode(16, OUTPUT);
@@ -310,10 +441,8 @@ void setup() {
   closeDoor();
 
   tft.init();
-  tft.setRotation(1);
-  // tft.invertDisplay(true);
+  tft.setRotation(currentRotation);
   tft.fillScreen(TFT_BLACK);
-  delay(50);
 
   configTime(6 * 3600, 0, "pool.ntp.org");
 
@@ -323,13 +452,14 @@ void setup() {
     delay(300);
     Serial.print(".");
   }
-  Serial.println("\nWiFi OK");
+  Serial.println("\nWiFi Connected");
   Serial.println(WiFi.localIP());
 
   server.on("/on", handleOn);
   server.on("/silent", handleSilent);
   server.on("/unlock", handleOn);
   server.on("/open", handleOn);
+  server.on("/rotation", handleRotation);
   server.begin();
 
   enterIdle();

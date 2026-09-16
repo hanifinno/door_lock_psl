@@ -6,7 +6,10 @@ cd "$DIR"
 
 MKSPIFFS="/Users/psl/Library/Arduino15/packages/esp32/tools/mkspiffs/0.2.3/mkspiffs"
 ESPTOOL="/Users/psl/Library/Arduino15/packages/esp32/tools/esptool_py/5.3.1/esptool"
-PORT="/dev/tty.usbserial-110"
+PORT=$(ls /dev/cu.usbserial* /dev/tty.usbserial* 2>/dev/null | head -n 1)
+if [ -z "$PORT" ]; then
+  PORT="/dev/cu.usbserial-1110"
+fi
 
 if [ ! -f "$MKSPIFFS" ]; then
   MKSPIFFS=$(ls /Users/psl/Library/Arduino15/packages/esp32/tools/mkspiffs/*/mkspiffs 2>/dev/null | head -n 1)

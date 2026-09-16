@@ -2,7 +2,7 @@ AP.o: \
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/WiFi/src/AP.cpp \
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/WiFi/src/WiFi.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/soc/esp32/include/soc/soc_caps.h \
- /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/dio_qspi/include/sdkconfig.h \
+ /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/qio_qspi/include/sdkconfig.h \
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/cores/esp32/Print.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/newlib/platform_include/stdio.h \
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/cores/esp32/WString.h \

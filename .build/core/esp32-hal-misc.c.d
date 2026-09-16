@@ -1,6 +1,6 @@
 /Users/psl/hanif_3.0/Door-lock-ai-main/.build/core/esp32-hal-misc.c.o: \
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/cores/esp32/esp32-hal-misc.c \
- /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/qio_qspi/include/sdkconfig.h \
+ /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/dio_qspi/include/sdkconfig.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/freertos/FreeRTOS-Kernel/include/freertos/FreeRTOS.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/freertos/config/include/freertos/FreeRTOSConfig.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/newlib/platform_include/assert.h \

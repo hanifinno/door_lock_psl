@@ -2,7 +2,7 @@ SPI.o: \
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/SPI/src/SPI.cpp \
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/SPI/src/SPI.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/soc/esp32/include/soc/soc_caps.h \
- /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/qio_qspi/include/sdkconfig.h \
+ /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/dio_qspi/include/sdkconfig.h \
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/variants/esp32/pins_arduino.h \
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/cores/esp32/esp32-hal-spi.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/freertos/FreeRTOS-Kernel/include/freertos/FreeRTOS.h \

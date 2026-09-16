@@ -2,7 +2,7 @@
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/cores/esp32/main.cpp \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/freertos/FreeRTOS-Kernel/include/freertos/FreeRTOS.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/freertos/config/include/freertos/FreeRTOSConfig.h \
- /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/qio_qspi/include/sdkconfig.h \
+ /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/dio_qspi/include/sdkconfig.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/newlib/platform_include/assert.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/freertos/config/xtensa/include/freertos/FreeRTOSConfig_arch.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/xtensa/include/xtensa_config.h \

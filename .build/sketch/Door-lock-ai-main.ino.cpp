@@ -35,41 +35,50 @@ bool activeMode = false;
 String currentEmpId = "";
 String currentName = "";
 
+// Anti-repeat tracking: Prevents door from repeatedly locking & unlocking
+// when the same person stands in front of the camera
+String lastUnlockedEmpId = "";
+String lastUnlockedName = "";
+unsigned long lastPersonSeenTime = 0;
+const unsigned long SAME_PERSON_COOLDOWN =
+    7000; // Wait 7s after person leaves before allowing same person to unlock
+          // again
+
 // ================= RELAY CONTROL (INVERTED) =================
 // LOW  = OPEN (Unlock Door)
 // HIGH = CLOSE (Lock Door / Safe State)
 
-#line 40 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 49 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void openDoor();
-#line 45 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 54 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void closeDoor();
-#line 52 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 61 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void drawIdleScreen();
-#line 105 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 114 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void drawAccessCard(String name, String empId);
-#line 162 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void enterIdle();
 #line 172 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void enterIdle();
+#line 182 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 String getNameFromRequest();
-#line 201 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 211 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 String getIdFromRequest();
-#line 232 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 241 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void processUnlockRequest(const char *source);
-#line 319 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 373 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void handleOn();
-#line 321 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void handleSilent();
-#line 323 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void handleRotation();
-#line 343 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void handleInvert();
-#line 354 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void handleMadctl();
 #line 375 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void handleSilent();
+#line 377 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void handleRotation();
+#line 397 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void handleInvert();
+#line 408 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void handleMadctl();
+#line 429 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void setup();
-#line 474 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 547 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void loop();
-#line 40 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 49 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void openDoor() {
   digitalWrite(RELAY_PIN, LOW);  // Unlock
   digitalWrite(GREEN_LED, HIGH); // Green LED ON
@@ -167,7 +176,8 @@ void drawAccessCard(String name, String empId) {
   // Spacing, then Employee Name Badge Pill
   String displayName = name;
   if (displayName.length() == 0) {
-    displayName = "ID: " + empId; // If name not provided, show ID prominently instead of generic 'EMPLOYEE'
+    displayName = "ID: " + empId; // If name not provided, show ID prominently
+                                  // instead of generic 'EMPLOYEE'
   }
   tft.fillRoundRect(14, 140, 212, 38, 6, 0x00A0);
   tft.drawRoundRect(14, 140, 212, 38, 6, 0x5E3F);
@@ -260,8 +270,7 @@ String getIdFromRequest() {
   return "";
 }
 
-// ================= UNIFIED UNLOCK HANDLER (WITH DEBOUNCING / ANTI-GLITCH)
-// =================
+// ================= UNIFIED UNLOCK HANDLER =================
 void processUnlockRequest(const char *source) {
   String empId = getIdFromRequest();
   String name = getNameFromRequest();
@@ -274,9 +283,12 @@ void processUnlockRequest(const char *source) {
 
   // If new request has empty name, but same empId was already known with a
   // name, retain it!
-  if (name.length() == 0 && empId.length() > 0 && empId == currentEmpId &&
-      currentName.length() > 0) {
-    name = currentName;
+  if (name.length() == 0 && empId.length() > 0) {
+    if (empId == currentEmpId && currentName.length() > 0) {
+      name = currentName;
+    } else if (empId == lastUnlockedEmpId && lastUnlockedName.length() > 0) {
+      name = lastUnlockedName;
+    }
   }
 
   // If query string didn't have name or id, check raw POST body (e.g. JSON or
@@ -315,25 +327,65 @@ void processUnlockRequest(const char *source) {
   Serial.println(empId.length() > 0 ? empId : "(None)");
   Serial.println("==========================================");
 
-  // Check if incoming request is for a DIFFERENT employee
-  bool isDifferentEmployee = (empId.length() > 0 && empId != currentEmpId) || 
-                             (name.length() > 0 && name != currentName && currentName.length() > 0);
-  
-  // If incoming request has a valid name, and previously it was drawn with (None) / empty,
-  // we also MUST redraw the card so the name appears immediately!
-  bool shouldRedrawWithName = (activeMode && name.length() > 0 && currentName.length() == 0);
+  // Check if incoming request matches the LAST person who unlocked
+  bool isSameAsLastPerson = false;
+  if (empId.length() > 0 && lastUnlockedEmpId.length() > 0) {
+    isSameAsLastPerson = (empId == lastUnlockedEmpId);
+  } else if (name.length() > 0 && lastUnlockedName.length() > 0) {
+    isSameAsLastPerson = (name == lastUnlockedName);
+  }
 
-  // ANTI-GLITCH / DEBOUNCE (Only debounce if it is the EXACT SAME employee!):
-  if (activeMode && (millis() - actionStart < UNLOCK_DURATION) && !isDifferentEmployee && !shouldRedrawWithName) {
-    actionStart = millis(); // Extend the timer
-    openDoor();             // Keep door open
-    Serial.println("[Debounce] Same employee scanned again. Extended timer without redrawing screen.");
-    server.send(200, "text/plain", "DOOR UNLOCKED");
+  // --- CASE 1: DOOR IS CURRENTLY UNLOCKED (Active 2-second window) ---
+  if (activeMode) {
+    if (isSameAsLastPerson) {
+      lastPersonSeenTime = millis();
+      // If we previously lacked the employee's name and now received it, update
+      // display immediately!
+      if (name.length() > 0 && currentName.length() == 0) {
+        currentName = name;
+        lastUnlockedName = name;
+        drawAccessCard(name, currentEmpId);
+        Serial.println("[Update] Received employee name during active unlock. "
+                       "Display updated.");
+      } else {
+        Serial.println("[Debounce] Same employee scanned during active unlock. "
+                       "Door already open.");
+      }
+      server.send(200, "text/plain", "DOOR UNLOCKED");
+      return;
+    }
+    // If a DIFFERENT person arrives while door is unlocked, switch immediately
+    // to the new person!
+    Serial.println("[Switch] Different employee arrived while door unlocked. "
+                   "Switching immediately!");
+  }
+
+  // --- CASE 2: DOOR IS LOCKED, BUT SAME PERSON IS CONSTANTLY IN FRONT OF
+  // CAMERA ---
+  if (!activeMode && isSameAsLastPerson) {
+    lastPersonSeenTime = millis(); // Refresh timestamp so cooldown extends
+                                   // while they stand there
+    Serial.println("[Anti-Repeat] Same person still in front of camera. Door "
+                   "remains locked.");
+    server.send(200, "text/plain", "ALREADY UNLOCKED FOR THIS PERSON");
     return;
   }
 
+  // Anonymous request debounce (empty ID and empty Name)
+  if (empId.length() == 0 && name.length() == 0) {
+    if (!activeMode && (millis() - actionStart < SAME_PERSON_COOLDOWN)) {
+      Serial.println("[Debounce] Anonymous request ignored within cooldown.");
+      server.send(200, "text/plain", "COOLDOWN ACTIVE");
+      return;
+    }
+  }
+
+  // --- CASE 3: NEW / DIFFERENT PERSON RECOGNIZED ---
   currentEmpId = empId;
   currentName = name;
+  lastUnlockedEmpId = empId;
+  lastUnlockedName = name;
+  lastPersonSeenTime = millis();
 
   // 1. Draw Clean Full-Screen Access Card
   drawAccessCard(name, empId);
@@ -344,6 +396,8 @@ void processUnlockRequest(const char *source) {
   // 3. Mark state as active (2 second auto-lock window)
   actionStart = millis();
   activeMode = true;
+
+  Serial.println("[Access] Door UNLOCKED for 2 seconds.");
 
   // 4. Send 200 OK
   server.send(200, "text/plain", "DOOR UNLOCKED");
@@ -425,8 +479,27 @@ void setup() {
 
   // Initialize TFT Display
   tft.init();
-  tft.setRotation(currentRotation);
-  tft.fillScreen(TFT_WHITE);
+
+  // ========== FULL SCREEN FORCE FIX ==========
+  tft.setRotation(0);
+
+  // Try these MADCTL values one by one (uncomment only one)
+  tft.writecommand(0x36); // MADCTL
+  // tft.writedata(0x08);         // ← প্রথমে এটা ট্রাই করুন
+
+  // যদি না হয় তাহলে নিচেরগুলো একটা একটা করে আনকমেন্ট করে টেস্ট করুন:
+  // tft.writedata(0x48);
+  // tft.writedata(0x88);
+  // tft.writedata(0xC8);
+  // tft.writedata(0x28);
+  // tft.writedata(0x68);
+  tft.writedata(0xA8);
+  // tft.writedata(0xE8);
+
+  delay(20);
+  tft.fillScreen(TFT_BLACK); // টেস্টের জন্য কালো করে দেখুন পুরো স্ক্রিন ভরছে কিনা
+  delay(500);
+  // ==========================================
 
   // Read display chip ID to identify actual controller
   Serial.println("\n==========================================");
@@ -510,5 +583,16 @@ void loop() {
   // Auto-lock door and return to Standby screen after 2 seconds
   if (activeMode && (millis() - actionStart >= UNLOCK_DURATION)) {
     enterIdle();
+  }
+
+  // Once person leaves camera frame for > SAME_PERSON_COOLDOWN, clear the
+  // anti-repeat lock
+  if (lastUnlockedEmpId.length() > 0 || lastUnlockedName.length() > 0) {
+    if (millis() - lastPersonSeenTime >= SAME_PERSON_COOLDOWN) {
+      Serial.println(
+          "[Anti-Repeat] Person left camera area. Resetting anti-repeat lock.");
+      lastUnlockedEmpId = "";
+      lastUnlockedName = "";
+    }
   }
 }

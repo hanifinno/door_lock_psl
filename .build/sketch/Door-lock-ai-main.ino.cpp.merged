@@ -51,7 +51,7 @@ void closeDoor() {
 // ================= DRAW STANDBY / IDLE SCREEN (100% FULL SCREEN)
 // =================
 void drawIdleScreen() {
-  tft.fillScreen(TFT_WHITE);         // Pure clean white full-screen background
+  tft.fillScreen(TFT_WHITE); // Pure clean white full-screen background
 
   // 1. Top Header Banner: Pakiza Software
   tft.fillRect(0, 0, 240, 62, 0x0110); // Deep Navy Blue header (0,0 to 240,62)
@@ -104,7 +104,7 @@ void drawIdleScreen() {
 // ================= DRAW ACCESS GRANTED / EMPLOYEE CARD (100% FULL SCREEN)
 // =================
 void drawAccessCard(String name, String empId) {
-  tft.fillScreen(TFT_WHITE);         // Pure clean background
+  tft.fillScreen(TFT_WHITE); // Pure clean background
 
   // 1. Top Header Banner: Pakiza Software
   tft.fillRect(0, 0, 240, 62, 0x0110);
@@ -122,45 +122,41 @@ void drawAccessCard(String name, String empId) {
   tft.drawRoundRect(11, 73, 218, 234, 11, TFT_GREEN);
 
   // Big Green Status Badge
-  tft.fillCircle(120, 108, 22, TFT_GREEN);
-  tft.setTextColor(TFT_BLACK, TFT_GREEN);
-  tft.setTextSize(2);
-  tft.drawCentreString("OK", 120, 100, 2);
+  // tft.fillCircle(120, 108, 22, TFT_GREEN);
+  // tft.setTextColor(TFT_BLACK, TFT_GREEN);
+  // tft.setTextSize(2);
+  // tft.drawCentreString("OK", 120, 100, 2);
 
-  // Title: "ACCESS GRANTED"
+  // Title: "ACCESS GRANTED" (Smaller, elegant font 2)
   tft.setTextColor(TFT_GREEN, 0x01A0);
-  tft.setTextSize(2);
-  tft.drawCentreString("ACCESS GRANTED", 120, 138, 2);
+  tft.setTextSize(1);
+  tft.drawCentreString("ACCESS GRANTED", 120, 105, 2);
 
-  // Employee Name
-  tft.setTextColor(TFT_WHITE, 0x01A0);
-  if (name.length() > 0) {
-    if (name.length() > 14) {
-      tft.setTextSize(1);
-      tft.drawCentreString(name, 120, 172, 2);
-    } else {
-      tft.setTextSize(1);
-      tft.drawCentreString(name, 120, 168, 2);
-    }
-  } else {
-    tft.setTextSize(1);
-    tft.drawCentreString("AUTHORIZED USER", 120, 168, 2);
+  // Spacing, then Employee Name Badge Pill
+  String displayName = name;
+  if (displayName.length() == 0) {
+    displayName = "ID: " + empId; // If name not provided, show ID prominently instead of generic 'EMPLOYEE'
   }
+  tft.fillRoundRect(14, 140, 212, 38, 6, 0x00A0);
+  tft.drawRoundRect(14, 140, 212, 38, 6, 0x5E3F);
+  tft.setTextColor(TFT_WHITE, 0x00A0);
+  tft.setTextSize(2);
+  tft.drawCentreString(displayName, 120, 151, 1);
 
-  // Employee ID Badge Pill
-  if (empId.length() > 0) {
-    tft.fillRoundRect(30, 204, 180, 32, 6, 0x00A0);
-    tft.drawRoundRect(30, 204, 180, 32, 6, 0x5E3F);
+  // Employee ID Badge Pill (Only if name was present and empId is also present)
+  if (name.length() > 0 && empId.length() > 0) {
+    tft.fillRoundRect(14, 188, 212, 38, 6, 0x00A0);
+    tft.drawRoundRect(14, 188, 212, 38, 6, 0x5E3F);
     tft.setTextColor(TFT_CYAN, 0x00A0);
     tft.setTextSize(2);
     String idDisplay = "ID: " + empId;
-    tft.drawCentreString(idDisplay, 120, 212, 1);
+    tft.drawCentreString(idDisplay, 120, 199, 1);
   }
 
   // Door Status Indicator
   tft.setTextColor(TFT_YELLOW, 0x01A0);
   tft.setTextSize(1);
-  tft.drawCentreString("DOOR UNLOCKED", 120, 262, 2);
+  tft.drawCentreString("DOOR UNLOCKED", 120, 252, 2);
 }
 
 // ================= ENTER IDLE STATE =================
@@ -251,23 +247,51 @@ void processUnlockRequest(const char *source) {
     name = currentName;
   }
 
+  // If query string didn't have name or id, check raw POST body (e.g. JSON or
+  // Form)
+  if (server.hasArg("plain")) {
+    String body = server.arg("plain");
+    int nameIdx = body.indexOf("\"name\":");
+    if (nameIdx < 0)
+      nameIdx = body.indexOf("\"employee_name\":");
+    if (nameIdx >= 0) {
+      int startQuote = body.indexOf("\"", nameIdx + 7);
+      if (startQuote >= 0) {
+        int endQuote = body.indexOf("\"", startQuote + 1);
+        if (endQuote > startQuote && name.length() == 0) {
+          name = body.substring(startQuote + 1, endQuote);
+        }
+      }
+    }
+  }
+
   Serial.println("\n==========================================");
   Serial.print("[API Request] Source: ");
   Serial.println(source);
+  Serial.print("[Raw Query Args Count]: ");
+  Serial.println(server.args());
+  for (int i = 0; i < server.args(); i++) {
+    Serial.print("   Arg[");
+    Serial.print(server.argName(i));
+    Serial.print("] = '");
+    Serial.print(server.arg(i));
+    Serial.println("'");
+  }
   Serial.print("[Employee Name]: ");
   Serial.println(name.length() > 0 ? name : "(None)");
   Serial.print("[Employee ID]  : ");
   Serial.println(empId.length() > 0 ? empId : "(None)");
   Serial.println("==========================================");
 
+  // If incoming request has a valid name, and previously it was drawn with (None) / empty,
+  // we MUST redraw the card so the name appears immediately!
+  bool shouldRedrawWithName = (activeMode && name.length() > 0 && currentName.length() == 0);
+
   // ANTI-GLITCH / DEBOUNCE:
-  // If door is already active and unlocked, do not redraw the screen to prevent
-  // flickering!
-  if (activeMode && (millis() - actionStart < 5000)) {
+  if (activeMode && (millis() - actionStart < 5000) && !shouldRedrawWithName) {
     actionStart = millis(); // Extend the 5-second timer
     openDoor();             // Keep door open
-    Serial.println("[Debounce] Door already open. Extended timer without "
-                   "redrawing screen.");
+    Serial.println("[Debounce] Door already open. Extended timer without redrawing screen.");
     server.send(200, "text/plain", "DOOR UNLOCKED");
     return;
   }
@@ -307,8 +331,9 @@ void handleRotation() {
   } else {
     drawIdleScreen();
   }
-  String resp = "Rotation set to: " + String(currentRotation) + 
-                " (Width: " + String(tft.width()) + ", Height: " + String(tft.height()) + ")";
+  String resp = "Rotation set to: " + String(currentRotation) +
+                " (Width: " + String(tft.width()) +
+                ", Height: " + String(tft.height()) + ")";
   server.send(200, "text/plain", resp);
 }
 
@@ -325,7 +350,8 @@ void handleInvert() {
 
 void handleMadctl() {
   if (server.hasArg("val")) {
-    long val = strtol(server.arg("val").c_str(), NULL, 0); // accepts hex (0x48) or dec
+    long val =
+        strtol(server.arg("val").c_str(), NULL, 0); // accepts hex (0x48) or dec
     tft.writecommand(TFT_MADCTL);
     tft.writedata((uint8_t)val);
     Serial.print("[Display] Sent raw MADCTL: 0x");
@@ -335,7 +361,8 @@ void handleMadctl() {
     } else {
       drawIdleScreen();
     }
-    server.send(200, "text/plain", "MADCTL applied: 0x" + String((uint8_t)val, HEX));
+    server.send(200, "text/plain",
+                "MADCTL applied: 0x" + String((uint8_t)val, HEX));
     return;
   }
   server.send(400, "text/plain", "Missing val param (e.g. ?val=0x48)");

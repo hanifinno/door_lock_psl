@@ -25,7 +25,7 @@ WebServer server(80);
 #define BACKLIGHT_PIN 21
 
 // ================= DISPLAY =================
-int currentRotation = 0; // 0 = ST7789 Portrait (240x320)
+int currentRotation = 0; // CYD ST7789 Portrait
 TFT_eSPI tft;
 
 // ================= SYSTEM STATE =================
@@ -51,7 +51,6 @@ void closeDoor() {
 // ================= DRAW STANDBY / IDLE SCREEN (100% FULL SCREEN)
 // =================
 void drawIdleScreen() {
-  tft.setRotation(currentRotation); // Portrait (240x320)
   tft.fillScreen(TFT_WHITE);         // Pure clean white full-screen background
 
   // 1. Top Header Banner: Pakiza Software
@@ -105,7 +104,6 @@ void drawIdleScreen() {
 // ================= DRAW ACCESS GRANTED / EMPLOYEE CARD (100% FULL SCREEN)
 // =================
 void drawAccessCard(String name, String empId) {
-  tft.setRotation(currentRotation); // Portrait (240x320)
   tft.fillScreen(TFT_WHITE);         // Pure clean background
 
   // 1. Top Header Banner: Pakiza Software
@@ -303,6 +301,7 @@ void handleRotation() {
   }
   Serial.print("[Display] Rotation changed dynamically to: ");
   Serial.println(currentRotation);
+  tft.setRotation(currentRotation);
   if (activeMode) {
     drawAccessCard(currentName, currentEmpId);
   } else {
@@ -324,6 +323,24 @@ void handleInvert() {
   server.send(200, "text/plain", inv ? "Inversion ON" : "Inversion OFF");
 }
 
+void handleMadctl() {
+  if (server.hasArg("val")) {
+    long val = strtol(server.arg("val").c_str(), NULL, 0); // accepts hex (0x48) or dec
+    tft.writecommand(TFT_MADCTL);
+    tft.writedata((uint8_t)val);
+    Serial.print("[Display] Sent raw MADCTL: 0x");
+    Serial.println((uint8_t)val, HEX);
+    if (activeMode) {
+      drawAccessCard(currentName, currentEmpId);
+    } else {
+      drawIdleScreen();
+    }
+    server.send(200, "text/plain", "MADCTL applied: 0x" + String((uint8_t)val, HEX));
+    return;
+  }
+  server.send(400, "text/plain", "Missing val param (e.g. ?val=0x48)");
+}
+
 // ================= SETUP =================
 void setup() {
   Serial.begin(115200);
@@ -337,8 +354,6 @@ void setup() {
   digitalWrite(BACKLIGHT_PIN, LOW);
   pinMode(27, OUTPUT);
   digitalWrite(27, HIGH);
-  pinMode(4, OUTPUT);
-  digitalWrite(4, HIGH);
   pinMode(16, OUTPUT);
   digitalWrite(16, HIGH);
 
@@ -347,10 +362,36 @@ void setup() {
 
   // Initialize TFT Display
   tft.init();
-  tft.setRotation(currentRotation); // Portrait (240x320)
+  tft.setRotation(currentRotation);
   tft.fillScreen(TFT_WHITE);
 
+  // Read display chip ID to identify actual controller
   Serial.println("\n==========================================");
+  Serial.println("[Display Chip Identification]");
+  uint8_t id1 = tft.readcommand8(0xD3, 1); // Manufacturer byte 1
+  uint8_t id2 = tft.readcommand8(0xD3, 2); // Manufacturer byte 2
+  uint8_t id3 = tft.readcommand8(0xD3, 3); // Manufacturer byte 3
+  Serial.print("  ID (0xD3): 0x");
+  Serial.print(id1, HEX);
+  Serial.print(", 0x");
+  Serial.print(id2, HEX);
+  Serial.print(", 0x");
+  Serial.println(id3, HEX);
+
+  uint8_t rddid1 = tft.readcommand8(0x04, 1);
+  uint8_t rddid2 = tft.readcommand8(0x04, 2);
+  uint8_t rddid3 = tft.readcommand8(0x04, 3);
+  Serial.print("  ID (0x04): 0x");
+  Serial.print(rddid1, HEX);
+  Serial.print(", 0x");
+  Serial.print(rddid2, HEX);
+  Serial.print(", 0x");
+  Serial.println(rddid3, HEX);
+
+  uint8_t madctl = tft.readcommand8(0x0B, 1); // Read MADCTL
+  Serial.print("  MADCTL   : 0x");
+  Serial.println(madctl, HEX);
+
   Serial.println("[Display Diagnostics]");
   Serial.print("  Resolution: ");
   Serial.print(tft.width());
@@ -391,6 +432,7 @@ void setup() {
   server.on("/open", handleOn);
   server.on("/rotation", handleRotation);
   server.on("/invert", handleInvert);
+  server.on("/madctl", handleMadctl);
   server.begin();
   Serial.println("[Server] HTTP Server started.");
 

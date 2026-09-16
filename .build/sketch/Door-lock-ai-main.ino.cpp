@@ -29,6 +29,7 @@ int currentRotation = 0; // CYD ST7789 Portrait
 TFT_eSPI tft;
 
 // ================= SYSTEM STATE =================
+const unsigned long UNLOCK_DURATION = 2000; // Unlock door for 2 seconds
 unsigned long actionStart = 0;
 bool activeMode = false;
 String currentEmpId = "";
@@ -38,37 +39,37 @@ String currentName = "";
 // LOW  = OPEN (Unlock Door)
 // HIGH = CLOSE (Lock Door / Safe State)
 
-#line 39 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 40 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void openDoor();
-#line 44 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 45 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void closeDoor();
-#line 51 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 52 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void drawIdleScreen();
-#line 104 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 105 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void drawAccessCard(String name, String empId);
-#line 161 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 162 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void enterIdle();
-#line 171 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 172 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 String getNameFromRequest();
-#line 200 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 201 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 String getIdFromRequest();
-#line 231 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 232 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void processUnlockRequest(const char *source);
-#line 314 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 319 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void handleOn();
-#line 316 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 321 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void handleSilent();
-#line 318 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 323 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void handleRotation();
-#line 338 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 343 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void handleInvert();
-#line 349 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 354 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void handleMadctl();
-#line 370 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 375 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void setup();
-#line 469 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 474 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void loop();
-#line 39 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+#line 40 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void openDoor() {
   digitalWrite(RELAY_PIN, LOW);  // Unlock
   digitalWrite(GREEN_LED, HIGH); // Green LED ON
@@ -314,15 +315,19 @@ void processUnlockRequest(const char *source) {
   Serial.println(empId.length() > 0 ? empId : "(None)");
   Serial.println("==========================================");
 
+  // Check if incoming request is for a DIFFERENT employee
+  bool isDifferentEmployee = (empId.length() > 0 && empId != currentEmpId) || 
+                             (name.length() > 0 && name != currentName && currentName.length() > 0);
+  
   // If incoming request has a valid name, and previously it was drawn with (None) / empty,
-  // we MUST redraw the card so the name appears immediately!
+  // we also MUST redraw the card so the name appears immediately!
   bool shouldRedrawWithName = (activeMode && name.length() > 0 && currentName.length() == 0);
 
-  // ANTI-GLITCH / DEBOUNCE:
-  if (activeMode && (millis() - actionStart < 5000) && !shouldRedrawWithName) {
-    actionStart = millis(); // Extend the 5-second timer
+  // ANTI-GLITCH / DEBOUNCE (Only debounce if it is the EXACT SAME employee!):
+  if (activeMode && (millis() - actionStart < UNLOCK_DURATION) && !isDifferentEmployee && !shouldRedrawWithName) {
+    actionStart = millis(); // Extend the timer
     openDoor();             // Keep door open
-    Serial.println("[Debounce] Door already open. Extended timer without redrawing screen.");
+    Serial.println("[Debounce] Same employee scanned again. Extended timer without redrawing screen.");
     server.send(200, "text/plain", "DOOR UNLOCKED");
     return;
   }
@@ -336,7 +341,7 @@ void processUnlockRequest(const char *source) {
   // 2. Unlock Physical Door
   openDoor();
 
-  // 3. Mark state as active (5 second auto-lock window)
+  // 3. Mark state as active (2 second auto-lock window)
   actionStart = millis();
   activeMode = true;
 
@@ -502,9 +507,8 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  // Auto-lock door and return to Standby screen after 5 seconds
-
-  if (activeMode && millis() - actionStart > 5000) {
+  // Auto-lock door and return to Standby screen after 2 seconds
+  if (activeMode && (millis() - actionStart >= UNLOCK_DURATION)) {
     enterIdle();
   }
 }

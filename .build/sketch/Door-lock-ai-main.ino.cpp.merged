@@ -29,6 +29,7 @@ int currentRotation = 0; // CYD ST7789 Portrait
 TFT_eSPI tft;
 
 // ================= SYSTEM STATE =================
+const unsigned long UNLOCK_DURATION = 2000; // Unlock door for 2 seconds
 unsigned long actionStart = 0;
 bool activeMode = false;
 String currentEmpId = "";
@@ -283,15 +284,19 @@ void processUnlockRequest(const char *source) {
   Serial.println(empId.length() > 0 ? empId : "(None)");
   Serial.println("==========================================");
 
+  // Check if incoming request is for a DIFFERENT employee
+  bool isDifferentEmployee = (empId.length() > 0 && empId != currentEmpId) || 
+                             (name.length() > 0 && name != currentName && currentName.length() > 0);
+  
   // If incoming request has a valid name, and previously it was drawn with (None) / empty,
-  // we MUST redraw the card so the name appears immediately!
+  // we also MUST redraw the card so the name appears immediately!
   bool shouldRedrawWithName = (activeMode && name.length() > 0 && currentName.length() == 0);
 
-  // ANTI-GLITCH / DEBOUNCE:
-  if (activeMode && (millis() - actionStart < 5000) && !shouldRedrawWithName) {
-    actionStart = millis(); // Extend the 5-second timer
+  // ANTI-GLITCH / DEBOUNCE (Only debounce if it is the EXACT SAME employee!):
+  if (activeMode && (millis() - actionStart < UNLOCK_DURATION) && !isDifferentEmployee && !shouldRedrawWithName) {
+    actionStart = millis(); // Extend the timer
     openDoor();             // Keep door open
-    Serial.println("[Debounce] Door already open. Extended timer without redrawing screen.");
+    Serial.println("[Debounce] Same employee scanned again. Extended timer without redrawing screen.");
     server.send(200, "text/plain", "DOOR UNLOCKED");
     return;
   }
@@ -305,7 +310,7 @@ void processUnlockRequest(const char *source) {
   // 2. Unlock Physical Door
   openDoor();
 
-  // 3. Mark state as active (5 second auto-lock window)
+  // 3. Mark state as active (2 second auto-lock window)
   actionStart = millis();
   activeMode = true;
 
@@ -471,9 +476,8 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  // Auto-lock door and return to Standby screen after 5 seconds
-
-  if (activeMode && millis() - actionStart > 5000) {
+  // Auto-lock door and return to Standby screen after 2 seconds
+  if (activeMode && (millis() - actionStart >= UNLOCK_DURATION)) {
     enterIdle();
   }
 }

@@ -29,56 +29,109 @@ int currentRotation = 0; // CYD ST7789 Portrait
 TFT_eSPI tft;
 
 // ================= SYSTEM STATE =================
-const unsigned long UNLOCK_DURATION = 2000; // Unlock door for 2 seconds
+const unsigned long UNLOCK_DURATION = 4000; // Unlock door for 2 seconds
 unsigned long actionStart = 0;
 bool activeMode = false;
 String currentEmpId = "";
 String currentName = "";
 
-// Anti-repeat tracking: Prevents door from repeatedly locking & unlocking
-// when the same person stands in front of the camera
-String lastUnlockedEmpId = "";
-String lastUnlockedName = "";
-unsigned long lastPersonSeenTime = 0;
-const unsigned long SAME_PERSON_COOLDOWN =
-    7000; // Wait 7s after person leaves before allowing same person to unlock
-          // again
+// 20-second per-person cooldown tracking
+struct UnlockedUser {
+  String empId;
+  String name;
+  unsigned long unlockTime;
+};
+
+const int MAX_RECENT = 10;
+UnlockedUser recentUsers[MAX_RECENT];
+int recentUserCount = 0;
+unsigned long SAME_PERSON_COOLDOWN = 20000; // 10 seconds cooldown per person
+unsigned long lastAnonymousUnlock = 0;
+
+#line 49 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+int findRecentUser(String empId, String name);
+#line 63 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void addOrUpdateRecentUser(String empId, String name, unsigned long uTime);
+#line 98 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void openDoor();
+#line 103 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void closeDoor();
+#line 110 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void drawIdleScreen();
+#line 163 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void drawAccessCard(String name, String empId);
+#line 221 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void enterIdle();
+#line 231 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+String getNameFromRequest();
+#line 260 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+String getIdFromRequest();
+#line 290 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void processUnlockRequest(const char *source);
+#line 435 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void handleOn();
+#line 437 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void handleSilent();
+#line 439 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void handleRotation();
+#line 459 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void handleInvert();
+#line 470 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void handleMadctl();
+#line 491 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void setup();
+#line 599 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+void loop();
+#line 49 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
+int findRecentUser(String empId, String name) {
+  for (int i = 0; i < recentUserCount; i++) {
+    if (empId.length() > 0 && recentUsers[i].empId.length() > 0 &&
+        empId == recentUsers[i].empId) {
+      return i;
+    }
+    if (name.length() > 0 && recentUsers[i].name.length() > 0 &&
+        name == recentUsers[i].name) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+void addOrUpdateRecentUser(String empId, String name, unsigned long uTime) {
+  int idx = findRecentUser(empId, name);
+  if (idx >= 0) {
+    recentUsers[idx].unlockTime = uTime;
+    if (name.length() > 0)
+      recentUsers[idx].name = name;
+    if (empId.length() > 0)
+      recentUsers[idx].empId = empId;
+    return;
+  }
+  if (recentUserCount < MAX_RECENT) {
+    recentUsers[recentUserCount].empId = empId;
+    recentUsers[recentUserCount].name = name;
+    recentUsers[recentUserCount].unlockTime = uTime;
+    recentUserCount++;
+  } else {
+    // Replace oldest entry
+    int oldestIdx = 0;
+    unsigned long oldest = recentUsers[0].unlockTime;
+    for (int i = 1; i < MAX_RECENT; i++) {
+      if (recentUsers[i].unlockTime < oldest) {
+        oldest = recentUsers[i].unlockTime;
+        oldestIdx = i;
+      }
+    }
+    recentUsers[oldestIdx].empId = empId;
+    recentUsers[oldestIdx].name = name;
+    recentUsers[oldestIdx].unlockTime = uTime;
+  }
+}
 
 // ================= RELAY CONTROL (INVERTED) =================
 // LOW  = OPEN (Unlock Door)
 // HIGH = CLOSE (Lock Door / Safe State)
 
-#line 49 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void openDoor();
-#line 54 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void closeDoor();
-#line 61 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void drawIdleScreen();
-#line 114 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void drawAccessCard(String name, String empId);
-#line 172 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void enterIdle();
-#line 182 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-String getNameFromRequest();
-#line 211 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-String getIdFromRequest();
-#line 241 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void processUnlockRequest(const char *source);
-#line 373 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void handleOn();
-#line 375 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void handleSilent();
-#line 377 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void handleRotation();
-#line 397 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void handleInvert();
-#line 408 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void handleMadctl();
-#line 429 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void setup();
-#line 547 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
-void loop();
-#line 49 "/Users/psl/hanif_3.0/Door-lock-ai-main/Door-lock-ai-main.ino"
 void openDoor() {
   digitalWrite(RELAY_PIN, LOW);  // Unlock
   digitalWrite(GREEN_LED, HIGH); // Green LED ON
@@ -286,8 +339,11 @@ void processUnlockRequest(const char *source) {
   if (name.length() == 0 && empId.length() > 0) {
     if (empId == currentEmpId && currentName.length() > 0) {
       name = currentName;
-    } else if (empId == lastUnlockedEmpId && lastUnlockedName.length() > 0) {
-      name = lastUnlockedName;
+    } else {
+      int rIdx = findRecentUser(empId, "");
+      if (rIdx >= 0 && recentUsers[rIdx].name.length() > 0) {
+        name = recentUsers[rIdx].name;
+      }
     }
   }
 
@@ -327,23 +383,41 @@ void processUnlockRequest(const char *source) {
   Serial.println(empId.length() > 0 ? empId : "(None)");
   Serial.println("==========================================");
 
-  // Check if incoming request matches the LAST person who unlocked
-  bool isSameAsLastPerson = false;
-  if (empId.length() > 0 && lastUnlockedEmpId.length() > 0) {
-    isSameAsLastPerson = (empId == lastUnlockedEmpId);
-  } else if (name.length() > 0 && lastUnlockedName.length() > 0) {
-    isSameAsLastPerson = (name == lastUnlockedName);
+  // Check if this person is already in our recent unlocks cache
+  int userIdx = -1;
+  if (empId.length() > 0 || name.length() > 0) {
+    userIdx = findRecentUser(empId, name);
+  }
+
+  // Check if this person is currently within their 20-second cooldown window
+  bool isOnCooldown = false;
+  unsigned long timeSinceUnlock = 0;
+  if (userIdx >= 0) {
+    timeSinceUnlock = millis() - recentUsers[userIdx].unlockTime;
+    if (timeSinceUnlock < SAME_PERSON_COOLDOWN) {
+      isOnCooldown = true;
+    }
+  }
+
+  // Anonymous request debounce (empty ID and empty Name)
+  if (empId.length() == 0 && name.length() == 0) {
+    if (activeMode || (millis() - lastAnonymousUnlock < SAME_PERSON_COOLDOWN)) {
+      Serial.println("[Debounce] Anonymous request ignored within cooldown.");
+      server.send(200, "text/plain", "COOLDOWN ACTIVE");
+      return;
+    }
+    lastAnonymousUnlock = millis();
   }
 
   // --- CASE 1: DOOR IS CURRENTLY UNLOCKED (Active 2-second window) ---
   if (activeMode) {
-    if (isSameAsLastPerson) {
-      lastPersonSeenTime = millis();
+    if (isOnCooldown) {
       // If we previously lacked the employee's name and now received it, update
       // display immediately!
       if (name.length() > 0 && currentName.length() == 0) {
         currentName = name;
-        lastUnlockedName = name;
+        if (userIdx >= 0)
+          recentUsers[userIdx].name = name;
         drawAccessCard(name, currentEmpId);
         Serial.println("[Update] Received employee name during active unlock. "
                        "Display updated.");
@@ -360,32 +434,24 @@ void processUnlockRequest(const char *source) {
                    "Switching immediately!");
   }
 
-  // --- CASE 2: DOOR IS LOCKED, BUT SAME PERSON IS CONSTANTLY IN FRONT OF
-  // CAMERA ---
-  if (!activeMode && isSameAsLastPerson) {
-    lastPersonSeenTime = millis(); // Refresh timestamp so cooldown extends
-                                   // while they stand there
-    Serial.println("[Anti-Repeat] Same person still in front of camera. Door "
-                   "remains locked.");
-    server.send(200, "text/plain", "ALREADY UNLOCKED FOR THIS PERSON");
+  // --- CASE 2: DOOR IS LOCKED, BUT SAME PERSON IS STILL ON 20s COOLDOWN ---
+  if (!activeMode && isOnCooldown) {
+    unsigned long remainingSec =
+        ((SAME_PERSON_COOLDOWN - timeSinceUnlock) / 1000) + 1;
+    Serial.print("[Cooldown] Employee (ID: ");
+    Serial.print(empId.length() > 0 ? empId : name);
+    Serial.print(") is on 20s cooldown (");
+    Serial.print(remainingSec);
+    Serial.println("s remaining). Door remains locked.");
+    server.send(200, "text/plain",
+                "COOLDOWN ACTIVE (" + String(remainingSec) + "s remaining)");
     return;
   }
 
-  // Anonymous request debounce (empty ID and empty Name)
-  if (empId.length() == 0 && name.length() == 0) {
-    if (!activeMode && (millis() - actionStart < SAME_PERSON_COOLDOWN)) {
-      Serial.println("[Debounce] Anonymous request ignored within cooldown.");
-      server.send(200, "text/plain", "COOLDOWN ACTIVE");
-      return;
-    }
-  }
-
-  // --- CASE 3: NEW / DIFFERENT PERSON RECOGNIZED ---
+  // --- CASE 3: NEW PERSON OR COOLDOWN EXPIRED (Eligible to unlock for 2s) ---
   currentEmpId = empId;
   currentName = name;
-  lastUnlockedEmpId = empId;
-  lastUnlockedName = name;
-  lastPersonSeenTime = millis();
+  addOrUpdateRecentUser(empId, name, millis());
 
   // 1. Draw Clean Full-Screen Access Card
   drawAccessCard(name, empId);
@@ -479,27 +545,9 @@ void setup() {
 
   // Initialize TFT Display
   tft.init();
-
-  // ========== FULL SCREEN FORCE FIX ==========
-  tft.setRotation(0);
-
-  // Try these MADCTL values one by one (uncomment only one)
-  tft.writecommand(0x36); // MADCTL
-  // tft.writedata(0x08);         // ← প্রথমে এটা ট্রাই করুন
-
-  // যদি না হয় তাহলে নিচেরগুলো একটা একটা করে আনকমেন্ট করে টেস্ট করুন:
-  // tft.writedata(0x48);
-  // tft.writedata(0x88);
-  // tft.writedata(0xC8);
-  // tft.writedata(0x28);
-  // tft.writedata(0x68);
-  tft.writedata(0xA8);
-  // tft.writedata(0xE8);
-
-  delay(20);
-  tft.fillScreen(TFT_BLACK); // টেস্টের জন্য কালো করে দেখুন পুরো স্ক্রিন ভরছে কিনা
-  delay(500);
-  // ==========================================
+  tft.setRotation(0); // Portrait
+  tft.fillScreen(TFT_BLACK);
+  delay(100);
 
   // Read display chip ID to identify actual controller
   Serial.println("\n==========================================");
@@ -569,6 +617,14 @@ void setup() {
   server.on("/rotation", handleRotation);
   server.on("/invert", handleInvert);
   server.on("/madctl", handleMadctl);
+  server.on("/cooldown", []() {
+    if (server.hasArg("sec")) {
+      SAME_PERSON_COOLDOWN = server.arg("sec").toInt() * 1000;
+    }
+    server.send(200, "text/plain",
+                "Cooldown set to: " + String(SAME_PERSON_COOLDOWN / 1000) +
+                    " seconds");
+  });
   server.begin();
   Serial.println("[Server] HTTP Server started.");
 
@@ -583,16 +639,5 @@ void loop() {
   // Auto-lock door and return to Standby screen after 2 seconds
   if (activeMode && (millis() - actionStart >= UNLOCK_DURATION)) {
     enterIdle();
-  }
-
-  // Once person leaves camera frame for > SAME_PERSON_COOLDOWN, clear the
-  // anti-repeat lock
-  if (lastUnlockedEmpId.length() > 0 || lastUnlockedName.length() > 0) {
-    if (millis() - lastPersonSeenTime >= SAME_PERSON_COOLDOWN) {
-      Serial.println(
-          "[Anti-Repeat] Person left camera area. Resetting anti-repeat lock.");
-      lastUnlockedEmpId = "";
-      lastUnlockedName = "";
-    }
   }
 }

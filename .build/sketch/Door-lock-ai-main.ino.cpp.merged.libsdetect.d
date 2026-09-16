@@ -388,13 +388,6 @@ Door-lock-ai-main.ino.cpp.o: \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Smooth_font.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Button.h \
  /Users/psl/Documents/Arduino/libraries/TFT_eSPI/Extensions/Sprite.h \
- /Users/psl/Documents/Arduino/libraries/TJpg_Decoder/src/TJpg_Decoder.h \
- /Users/psl/Documents/Arduino/libraries/TJpg_Decoder/src/User_Config.h \
- /Users/psl/Documents/Arduino/libraries/TJpg_Decoder/src/tjpgd.h \
- /Users/psl/Documents/Arduino/libraries/TJpg_Decoder/src/tjpgdcnf.h \
- /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/LittleFS/src/LittleFS.h \
- /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/SD/src/SD.h \
- /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/SD/src/sd_defines.h \
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/WebServer/src/WebServer.h \
  /Users/psl/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/WebServer/src/HTTP_Method.h \
  /Users/psl/Library/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/http_parser/http_parser.h \

@@ -25,7 +25,7 @@ WebServer server(80);
 #define BACKLIGHT_PIN 21
 
 // ================= DISPLAY =================
-int currentRotation = 6; // 6 = Normal un-mirrored Portrait (240x320)
+int currentRotation = 0; // 0 = ST7789 Portrait (240x320)
 TFT_eSPI tft;
 
 // ================= SYSTEM STATE =================

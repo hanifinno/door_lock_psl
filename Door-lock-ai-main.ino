@@ -2,6 +2,7 @@
 #include <HTTPClient.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <sys/time.h>
 #include <time.h>
 
 LGFX tft;                // LovyanGFX object
@@ -22,11 +23,13 @@ WebServer server(80);
 #define GREEN_LED 17
 
 // ================= STATE =================
-const unsigned long UNLOCK_DURATION = 4000;
+const unsigned long UNLOCK_DURATION = 10000;
 unsigned long actionStart = 0;
 bool activeMode = false;
 String currentEmpId = "";
 String currentName = "";
+String currentTimeStr = "";
+String currentDateStr = "";
 
 struct UnlockedUser {
   String empId;
@@ -49,13 +52,28 @@ void closeDoor() {
   digitalWrite(GREEN_LED, LOW);
 }
 
-// ================= TIME =================
+// ================= TIME & DATE =================
 String getCurrentTime() {
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo, 10))
+  if (!getLocalTime(&timeinfo, 10)) {
+    if (currentTimeStr.length() > 0)
+      return currentTimeStr;
     return "--:--";
-  char buf[8];
-  strftime(buf, sizeof(buf), "%H:%M", &timeinfo);
+  }
+  char buf[16];
+  strftime(buf, sizeof(buf), "%H:%M:%S", &timeinfo);
+  return String(buf);
+}
+
+String getCurrentDate() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo, 10)) {
+    if (currentDateStr.length() > 0)
+      return currentDateStr;
+    return "--/--/----";
+  }
+  char buf[16];
+  strftime(buf, sizeof(buf), "%d-%m-%Y", &timeinfo);
   return String(buf);
 }
 
@@ -157,7 +175,8 @@ void drawIdleScreen() {
 }
 
 // ================= ACCESS GRANTED =================
-void drawAccessCard(String name, String empId) {
+void drawAccessCard(String name, String empId, String accessTime = "",
+                    String accessDate = "") {
   tft.setRotation(currentRotation);
   tft.fillScreen(TFT_WHITE);
   int w = tft.width();
@@ -166,6 +185,9 @@ void drawAccessCard(String name, String empId) {
   String displayName =
       name.length() > 0 ? name
                         : (empId.length() > 0 ? "ID: " + empId : "AUTHORIZED");
+
+  String showTime = accessTime.length() > 0 ? accessTime : getCurrentTime();
+  String showDate = accessDate.length() > 0 ? accessDate : getCurrentDate();
 
   if (h >= w) {
     // ======== FULL-SCREEN PORTRAIT (Dynamic 240x320 or 320x480) ========
@@ -210,18 +232,19 @@ void drawAccessCard(String name, String empId) {
       tft.drawCenterString("ID: " + empId, w / 2, cardY + 151);
     }
 
-    // Time
+    // Date & Time
     tft.setTextColor(TFT_YELLOW, 0x01A0);
     tft.setTextSize(2);
-    tft.drawCenterString("Time: " + getCurrentTime(), w / 2, cardY + 195);
-
-    // Status
-    tft.setTextColor(TFT_YELLOW, 0x01A0);
-    tft.setTextSize(2);
-    tft.drawCenterString("DOOR UNLOCKED", w / 2, cardY + 235);
-
-    // Status Accent Line
-    tft.fillRoundRect(24, cardY + 265, w - 48, 6, 3, TFT_GREEN);
+    if (showDate.length() > 0 && showDate != "--/--/----") {
+      tft.drawCenterString("Date: " + showDate, w / 2, cardY + 188);
+      tft.drawCenterString("Time: " + showTime, w / 2, cardY + 218);
+      tft.drawCenterString("DOOR UNLOCKED", w / 2, cardY + 258);
+      tft.fillRoundRect(24, cardY + 288, w - 48, 6, 3, TFT_GREEN);
+    } else {
+      tft.drawCenterString("Time: " + showTime, w / 2, cardY + 195);
+      tft.drawCenterString("DOOR UNLOCKED", w / 2, cardY + 235);
+      tft.fillRoundRect(24, cardY + 265, w - 48, 6, 3, TFT_GREEN);
+    }
   } else {
     // ======== FULL-SCREEN LANDSCAPE (320 x 240) ========
     // 1. Header
@@ -254,10 +277,14 @@ void drawAccessCard(String name, String empId) {
       tft.drawCenterString("ID: " + empId, 160, 123);
     }
 
-    // Time & Status
+    // Time & Date Status
     tft.setTextColor(TFT_YELLOW, 0x01A0);
     tft.setTextSize(2);
-    tft.drawCenterString("Time: " + getCurrentTime(), 160, 154);
+    if (showDate.length() > 0 && showDate != "--/--/----") {
+      tft.drawCenterString(showDate + "  " + showTime, 160, 154);
+    } else {
+      tft.drawCenterString("Time: " + showTime, 160, 154);
+    }
 
     tft.setTextSize(1);
     tft.drawCenterString("DOOR UNLOCKED", 160, 184);
@@ -272,58 +299,302 @@ void enterIdle() {
   activeMode = false;
   currentEmpId = "";
   currentName = "";
+  currentTimeStr = "";
+  currentDateStr = "";
 }
 
-// ================= HELPERS =================
-String getNameFromRequest() {
-  if (server.hasArg("name"))
-    return server.arg("name");
-  if (server.hasArg("employee_name"))
-    return server.arg("employee_name");
-  if (server.hasArg("emp_name"))
-    return server.arg("emp_name");
-  if (server.hasArg("empName"))
-    return server.arg("empName");
-  if (server.hasArg("userName"))
-    return server.arg("userName");
-  if (server.hasArg("user_name"))
-    return server.arg("user_name");
-  if (server.hasArg("full_name"))
-    return server.arg("full_name");
-  if (server.hasArg("fullName"))
-    return server.arg("fullName");
-  for (int i = 0; i < server.args(); i++) {
-    String a = server.argName(i);
-    a.toLowerCase();
-    if (a.indexOf("name") >= 0)
-      return server.arg(i);
+// ================= HELPERS & PARSERS =================
+String urlDecode(String str) {
+  String decoded = "";
+  char temp[] = "0x00";
+  int len = str.length();
+  int i = 0;
+  while (i < len) {
+    char c = str[i];
+    if (c == '+') {
+      decoded += ' ';
+      i++;
+    } else if (c == '%' && i + 2 < len) {
+      temp[2] = str[i + 1];
+      temp[3] = str[i + 2];
+      char val = (char)strtol(temp, NULL, 16);
+      if (val != 0) {
+        decoded += val;
+      } else {
+        decoded += c;
+      }
+      i += 3;
+    } else {
+      decoded += c;
+      i++;
+    }
   }
+  return decoded;
+}
+
+String cleanString(String s) {
+  s = urlDecode(s);
+  s.replace("\"", "");
+  s.replace("\\", "");
+  s.replace("+", " ");
+  s.trim();
+  return s;
+}
+
+String getRawBody() {
+  if (server.hasArg("plain"))
+    return server.arg("plain");
+  if (server.hasArg("payload"))
+    return server.arg("payload");
+  if (server.hasArg("body"))
+    return server.arg("body");
+  if (server.hasArg("data"))
+    return server.arg("data");
   return "";
+}
+
+String extractJsonValue(const String &body, const String &key) {
+  if (body.length() == 0)
+    return "";
+
+  int keyIdx = body.indexOf("\"" + key + "\"");
+  if (keyIdx < 0) {
+    keyIdx = body.indexOf(key);
+    if (keyIdx < 0)
+      return "";
+  }
+
+  int colonIdx = body.indexOf(':', keyIdx + key.length());
+  if (colonIdx < 0)
+    return "";
+
+  int startIdx = colonIdx + 1;
+  while (startIdx < (int)body.length() &&
+         (body[startIdx] == ' ' || body[startIdx] == '\t' ||
+          body[startIdx] == '\r' || body[startIdx] == '\n')) {
+    startIdx++;
+  }
+  if (startIdx >= (int)body.length())
+    return "";
+
+  if (body[startIdx] == '\"') {
+    startIdx++;
+    int endIdx = body.indexOf('\"', startIdx);
+    if (endIdx < 0)
+      return "";
+    return body.substring(startIdx, endIdx);
+  } else {
+    int endIdx = startIdx;
+    while (endIdx < (int)body.length() && body[endIdx] != ',' &&
+           body[endIdx] != '}' && body[endIdx] != ']' && body[endIdx] != '\r' &&
+           body[endIdx] != '\n') {
+      endIdx++;
+    }
+    return body.substring(startIdx, endIdx);
+  }
+}
+
+void syncSystemTime(String timeStr, String dateStr) {
+  if (timeStr.length() < 4)
+    return;
+
+  int hour = 0, min = 0, sec = 0;
+  sscanf(timeStr.c_str(), "%d:%d:%d", &hour, &min, &sec);
+
+  int day = 17, month = 9, year = 2026;
+  if (dateStr.length() >= 8) {
+    if (dateStr.indexOf('-') > 0) {
+      sscanf(dateStr.c_str(), "%d-%d-%d", &day, &month, &year);
+    } else if (dateStr.indexOf('/') > 0) {
+      sscanf(dateStr.c_str(), "%d/%d/%d", &day, &month, &year);
+    }
+  }
+
+  struct tm tm_info;
+  memset(&tm_info, 0, sizeof(tm_info));
+  tm_info.tm_hour = hour;
+  tm_info.tm_min = min;
+  tm_info.tm_sec = sec;
+  tm_info.tm_year = (year >= 1970) ? (year - 1900) : (2026 - 1900);
+  tm_info.tm_mon = (month >= 1 && month <= 12) ? (month - 1) : 8;
+  tm_info.tm_mday = (day >= 1 && day <= 31) ? day : 17;
+
+  time_t t = mktime(&tm_info);
+  if (t != (time_t)-1) {
+    struct timeval tv = {.tv_sec = t, .tv_usec = 0};
+    settimeofday(&tv, NULL);
+    Serial.printf(
+        "[TIME] System clock synchronized to %02d:%02d:%02d %02d-%02d-%04d\n",
+        hour, min, sec, tm_info.tm_mday, tm_info.tm_mon + 1,
+        tm_info.tm_year + 1900);
+  }
+}
+
+String getNameFromRequest() {
+  String val = "";
+
+  // 1. HIGHER PRIORITY: Request Payload (JSON body)
+  String body = getRawBody();
+  if (body.length() > 0) {
+    val = extractJsonValue(body, "employee_name");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "name");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "emp_name");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "empName");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "userName");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "user_name");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "full_name");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "fullName");
+  }
+
+  // 2. FALLBACK: URL Query / Form arguments
+  if (val.length() == 0) {
+    if (server.hasArg("employee_name"))
+      val = server.arg("employee_name");
+    else if (server.hasArg("name"))
+      val = server.arg("name");
+    else if (server.hasArg("emp_name"))
+      val = server.arg("emp_name");
+    else if (server.hasArg("empName"))
+      val = server.arg("empName");
+    else if (server.hasArg("userName"))
+      val = server.arg("userName");
+    else if (server.hasArg("user_name"))
+      val = server.arg("user_name");
+    else if (server.hasArg("full_name"))
+      val = server.arg("full_name");
+    else if (server.hasArg("fullName"))
+      val = server.arg("fullName");
+  }
+
+  // 3. Fallback: scan all argument names
+  if (val.length() == 0) {
+    for (int i = 0; i < server.args(); i++) {
+      String a = server.argName(i);
+      a.toLowerCase();
+      if (a.indexOf("name") >= 0) {
+        val = server.arg(i);
+        break;
+      }
+    }
+  }
+
+  return cleanString(val);
 }
 
 String getIdFromRequest() {
-  if (server.hasArg("employee_id"))
-    return server.arg("employee_id");
-  if (server.hasArg("emp"))
-    return server.arg("emp");
-  if (server.hasArg("id"))
-    return server.arg("id");
-  if (server.hasArg("emp_id"))
-    return server.arg("emp_id");
-  if (server.hasArg("empId"))
-    return server.arg("empId");
-  if (server.hasArg("userId"))
-    return server.arg("userId");
-  if (server.hasArg("user_id"))
-    return server.arg("user_id");
-  for (int i = 0; i < server.args(); i++) {
-    String a = server.argName(i);
-    a.toLowerCase();
-    if ((a.indexOf("id") >= 0 || a.indexOf("emp") >= 0) &&
-        a.indexOf("url") < 0 && a.indexOf("pic") < 0)
-      return server.arg(i);
+  String val = "";
+
+  // 1. HIGHER PRIORITY: Request Payload (JSON body)
+  String body = getRawBody();
+  if (body.length() > 0) {
+    val = extractJsonValue(body, "employee_id");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "id");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "emp_id");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "empId");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "emp");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "userId");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "user_id");
   }
-  return "";
+
+  // 2. FALLBACK: URL Query / Form arguments
+  if (val.length() == 0) {
+    if (server.hasArg("employee_id"))
+      val = server.arg("employee_id");
+    else if (server.hasArg("id"))
+      val = server.arg("id");
+    else if (server.hasArg("emp_id"))
+      val = server.arg("emp_id");
+    else if (server.hasArg("empId"))
+      val = server.arg("empId");
+    else if (server.hasArg("emp"))
+      val = server.arg("emp");
+    else if (server.hasArg("userId"))
+      val = server.arg("userId");
+    else if (server.hasArg("user_id"))
+      val = server.arg("user_id");
+  }
+
+  // 3. Fallback: scan all argument names
+  if (val.length() == 0) {
+    for (int i = 0; i < server.args(); i++) {
+      String a = server.argName(i);
+      a.toLowerCase();
+      if ((a.indexOf("id") >= 0 || a.indexOf("emp") >= 0) &&
+          a.indexOf("url") < 0 && a.indexOf("pic") < 0) {
+        val = server.arg(i);
+        break;
+      }
+    }
+  }
+
+  return cleanString(val);
+}
+
+String getTimeFromRequest() {
+  String val = "";
+
+  // 1. HIGHER PRIORITY: Request Payload (JSON body)
+  String body = getRawBody();
+  if (body.length() > 0) {
+    val = extractJsonValue(body, "time");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "timestamp");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "time_str");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "datetime");
+  }
+
+  // 2. FALLBACK: URL Query / Form arguments
+  if (val.length() == 0) {
+    if (server.hasArg("time"))
+      val = server.arg("time");
+    else if (server.hasArg("time_str"))
+      val = server.arg("time_str");
+    else if (server.hasArg("timestamp"))
+      val = server.arg("timestamp");
+    else if (server.hasArg("datetime"))
+      val = server.arg("datetime");
+  }
+
+  return cleanString(val);
+}
+
+String getDateFromRequest() {
+  String val = "";
+
+  // 1. HIGHER PRIORITY: Request Payload (JSON body)
+  String body = getRawBody();
+  if (body.length() > 0) {
+    val = extractJsonValue(body, "date");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "date_str");
+    if (val.length() == 0)
+      val = extractJsonValue(body, "date_time");
+  }
+
+  // 2. FALLBACK: URL Query / Form arguments
+  if (val.length() == 0) {
+    if (server.hasArg("date"))
+      val = server.arg("date");
+    else if (server.hasArg("date_str"))
+      val = server.arg("date_str");
+  }
+
+  return cleanString(val);
 }
 
 int findRecentUser(String empId, String name) {
@@ -357,13 +628,43 @@ void addOrUpdateRecentUser(String empId, String name, unsigned long uTime) {
   }
 }
 
+void sendResponse(int code, bool success, const String &msg,
+                  const String &empId = "", const String &name = "",
+                  const String &timeStr = "", const String &dateStr = "") {
+  String json = "{";
+  json += "\"status\":\"" + String(success ? "success" : "failure") + "\",";
+  json += "\"success\":" + String(success ? "true" : "false") + ",";
+  json += "\"message\":\"" + msg + "\"";
+  if (empId.length() > 0)
+    json += ",\"employee_id\":\"" + empId + "\"";
+  if (name.length() > 0)
+    json += ",\"employee_name\":\"" + name + "\"";
+  if (timeStr.length() > 0)
+    json += ",\"time\":\"" + timeStr + "\"";
+  if (dateStr.length() > 0)
+    json += ",\"date\":\"" + dateStr + "\"";
+  json += "}";
+  server.send(code, "application/json", json);
+}
+
 void processUnlockRequest(const char *source) {
   String empId = getIdFromRequest();
   String name = getNameFromRequest();
-  name.replace("+", " ");
-  name.replace("%20", " ");
-  empId.trim();
-  name.trim();
+  String reqTime = getTimeFromRequest();
+  String reqDate = getDateFromRequest();
+
+  if (reqTime.length() > 0 || reqDate.length() > 0) {
+    syncSystemTime(reqTime, reqDate);
+    currentTimeStr = reqTime;
+    currentDateStr = reqDate;
+  } else {
+    currentTimeStr = getCurrentTime();
+    currentDateStr = getCurrentDate();
+  }
+
+  Serial.printf(
+      "[REQ] Source: %s, ID: '%s', Name: '%s', Time: '%s', Date: '%s'\n",
+      source, empId.c_str(), name.c_str(), reqTime.c_str(), reqDate.c_str());
 
   if (name.length() == 0 && empId.length() > 0) {
     if (empId == currentEmpId && currentName.length() > 0)
@@ -384,7 +685,7 @@ void processUnlockRequest(const char *source) {
 
   if (empId.length() == 0 && name.length() == 0) {
     if (activeMode || (millis() - lastAnonymousUnlock < SAME_PERSON_COOLDOWN)) {
-      server.send(200, "text/plain", "COOLDOWN ACTIVE");
+      sendResponse(200, false, "COOLDOWN ACTIVE");
       return;
     }
     lastAnonymousUnlock = millis();
@@ -393,14 +694,15 @@ void processUnlockRequest(const char *source) {
   if (activeMode && isOnCooldown) {
     if (name.length() > 0 && currentName.length() == 0) {
       currentName = name;
-      drawAccessCard(name, currentEmpId);
+      drawAccessCard(name, currentEmpId, currentTimeStr, currentDateStr);
     }
-    server.send(200, "text/plain", "DOOR UNLOCKED");
+    sendResponse(200, true, "DOOR UNLOCKED", currentEmpId, currentName,
+                 currentTimeStr, currentDateStr);
     return;
   }
 
   if (!activeMode && isOnCooldown) {
-    server.send(200, "text/plain", "COOLDOWN ACTIVE");
+    sendResponse(200, false, "COOLDOWN ACTIVE", empId, name);
     return;
   }
 
@@ -408,12 +710,13 @@ void processUnlockRequest(const char *source) {
   currentName = name;
   addOrUpdateRecentUser(empId, name, millis());
 
-  drawAccessCard(name, empId);
+  drawAccessCard(name, empId, currentTimeStr, currentDateStr);
   openDoor();
   actionStart = millis();
   activeMode = true;
 
-  server.send(200, "text/plain", "DOOR UNLOCKED");
+  sendResponse(200, true, "DOOR UNLOCKED", empId, name, currentTimeStr,
+               currentDateStr);
 }
 
 void handleOn() { processUnlockRequest("/on"); }
@@ -424,7 +727,7 @@ void handleRotation() {
   }
   tft.setRotation(currentRotation);
   if (activeMode) {
-    drawAccessCard(currentName, currentEmpId);
+    drawAccessCard(currentName, currentEmpId, currentTimeStr, currentDateStr);
   } else {
     drawIdleScreen();
   }
@@ -441,7 +744,7 @@ void handleInvert() {
   }
   tft.invertDisplay(inv);
   if (activeMode) {
-    drawAccessCard(currentName, currentEmpId);
+    drawAccessCard(currentName, currentEmpId, currentTimeStr, currentDateStr);
   } else {
     drawIdleScreen();
   }

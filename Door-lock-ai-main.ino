@@ -5,7 +5,7 @@
 #include <time.h>
 
 LGFX tft;                // LovyanGFX object
-int currentRotation = 6; // 6: Portrait Un-mirrored (Full Screen 240x320)
+int currentRotation = 0; // 6: Portrait Un-mirrored (Full Screen 240x320)
 
 // ================= WIFI =================
 const char *ssid = "HitchHiker";
@@ -64,55 +64,62 @@ void drawIdleScreen() {
   tft.setRotation(currentRotation);
   tft.fillScreen(TFT_WHITE);
   int w = tft.width();
+  int h = tft.height();
 
-  if (w <= 240) {
-    // ======== FULL-SCREEN PORTRAIT (240 x 320) ========
+  if (h >= w) {
+    // ======== FULL-SCREEN PORTRAIT (Dynamic 240x320 or 320x480) ========
     // 1. Header Banner
-    tft.fillRect(0, 0, 240, 56, 0x0110);
-    tft.drawFastHLine(0, 55, 240, 0x039F);
+    tft.fillRect(0, 0, w, 56, 0x0110);
+    tft.drawFastHLine(0, 55, w, 0x039F);
     tft.setTextColor(TFT_WHITE, 0x0110);
     tft.setTextSize(2);
-    tft.drawCenterString("PAKIZA", 120, 10);
+    tft.drawCenterString("PAKIZA", w / 2, 10);
     tft.setTextColor(0x5E3F, 0x0110);
     tft.setTextSize(1);
-    tft.drawCenterString("SOFTWARE LTD", 120, 34);
+    tft.drawCenterString("SOFTWARE LTD", w / 2, 34);
 
     // 2. Center Face Recognition Standby Card
-    tft.fillRoundRect(8, 64, 224, 196, 12, 0xF7BE);
-    tft.drawRoundRect(8, 64, 224, 196, 12, 0xC618);
+    int cardY = 64;
+    int footerH = 44;
+    int cardH = h - cardY - footerH - 16;
+    tft.fillRoundRect(8, cardY, w - 16, cardH, 12, 0xF7BE);
+    tft.drawRoundRect(8, cardY, w - 16, cardH, 12, 0xC618);
 
     // Camera circle target
-    int cx = 120, cy = 128;
-    tft.drawCircle(cx, cy, 34, 0x0110);
-    tft.drawCircle(cx, cy, 33, 0x0110);
+    int cx = w / 2;
+    int cy = cardY + (cardH / 3);
+    tft.drawCircle(cx, cy, 38, 0x0110);
+    tft.drawCircle(cx, cy, 37, 0x0110);
     tft.fillCircle(cx, cy, 6, TFT_GREEN);
 
     // Corner brackets for facial scanner
-    tft.drawFastHLine(cx - 45, cy - 45, 18, 0x0110);
-    tft.drawFastVLine(cx - 45, cy - 45, 18, 0x0110);
-    tft.drawFastHLine(cx + 27, cy - 45, 18, 0x0110);
-    tft.drawFastVLine(cx + 45, cy - 45, 18, 0x0110);
-    tft.drawFastHLine(cx - 45, cy + 45, 18, 0x0110);
-    tft.drawFastVLine(cx - 45, cy + 27, 18, 0x0110);
-    tft.drawFastHLine(cx + 27, cy + 45, 18, 0x0110);
-    tft.drawFastVLine(cx + 45, cy + 27, 18, 0x0110);
+    tft.drawFastHLine(cx - 50, cy - 50, 20, 0x0110);
+    tft.drawFastVLine(cx - 50, cy - 50, 20, 0x0110);
+    tft.drawFastHLine(cx + 30, cy - 50, 20, 0x0110);
+    tft.drawFastVLine(cx + 50, cy - 50, 20, 0x0110);
+    tft.drawFastHLine(cx - 50, cy + 50, 20, 0x0110);
+    tft.drawFastVLine(cx - 50, cy + 30, 20, 0x0110);
+    tft.drawFastHLine(cx + 30, cy + 50, 20, 0x0110);
+    tft.drawFastVLine(cx + 50, cy + 30, 20, 0x0110);
 
     tft.setTextColor(0x0110, 0xF7BE);
     tft.setTextSize(2);
-    tft.drawCenterString("READY TO SCAN", 120, 185);
+    tft.drawCenterString("READY TO SCAN", cx, cy + 55);
 
     tft.setTextColor(0x7BEF, 0xF7BE);
     tft.setTextSize(1);
-    tft.drawCenterString("Please look at camera", 120, 218);
+    tft.drawCenterString("Please look at camera", cx, cy + 90);
 
     // 3. Footer Banner: Online Status & IP
-    tft.fillRoundRect(8, 268, 224, 44, 8, 0x0110);
-    tft.fillCircle(22, 290, 4, TFT_GREEN);
+    int footerY = h - footerH - 8;
+    tft.fillRoundRect(8, footerY, w - 16, footerH, 8, 0x0110);
+    tft.fillCircle(24, footerY + (footerH / 2), 4, TFT_GREEN);
     tft.setTextColor(TFT_WHITE, 0x0110);
     tft.setTextSize(1);
-    tft.drawString("SYSTEM ONLINE", 32, 285);
+    tft.drawString("SYSTEM ONLINE", 36, footerY + (footerH / 2) - 4);
     tft.setTextColor(0x5E3F, 0x0110);
-    tft.drawRightString(WiFi.localIP().toString(), 224, 285);
+    tft.drawRightString(WiFi.localIP().toString(), w - 16,
+                        footerY + (footerH / 2) - 4);
   } else {
     // ======== FULL-SCREEN LANDSCAPE (320 x 240) ========
     // 1. Header
@@ -154,64 +161,67 @@ void drawAccessCard(String name, String empId) {
   tft.setRotation(currentRotation);
   tft.fillScreen(TFT_WHITE);
   int w = tft.width();
+  int h = tft.height();
 
   String displayName =
       name.length() > 0 ? name
                         : (empId.length() > 0 ? "ID: " + empId : "AUTHORIZED");
 
-  if (w <= 240) {
-    // ======== FULL-SCREEN PORTRAIT (240 x 320) ========
+  if (h >= w) {
+    // ======== FULL-SCREEN PORTRAIT (Dynamic 240x320 or 320x480) ========
     // 1. Header
-    tft.fillRect(0, 0, 240, 56, 0x0110);
-    tft.drawFastHLine(0, 55, 240, TFT_GREEN);
+    tft.fillRect(0, 0, w, 56, 0x0110);
+    tft.drawFastHLine(0, 55, w, TFT_GREEN);
     tft.setTextColor(TFT_WHITE, 0x0110);
     tft.setTextSize(2);
-    tft.drawCenterString("PAKIZA", 120, 10);
+    tft.drawCenterString("PAKIZA", w / 2, 10);
     tft.setTextColor(0x5E3F, 0x0110);
     tft.setTextSize(1);
-    tft.drawCenterString("SOFTWARE LTD", 120, 34);
+    tft.drawCenterString("SOFTWARE LTD", w / 2, 34);
 
-    // 2. Green Access Card (Edge-to-Edge)
-    tft.fillRoundRect(8, 64, 224, 248, 12, 0x01A0);
-    tft.drawRoundRect(8, 64, 224, 248, 12, TFT_GREEN);
+    // 2. Green Access Card (Edge-to-Edge, full height)
+    int cardY = 64;
+    int cardH = h - cardY - 12;
+    tft.fillRoundRect(8, cardY, w - 16, cardH, 12, 0x01A0);
+    tft.drawRoundRect(8, cardY, w - 16, cardH, 12, TFT_GREEN);
 
     // Green OK badge
-    tft.fillCircle(120, 94, 20, TFT_GREEN);
+    tft.fillCircle(w / 2, cardY + 36, 22, TFT_GREEN);
     tft.setTextColor(0x01A0, TFT_GREEN);
     tft.setTextSize(2);
-    tft.drawCenterString("OK", 120, 86);
+    tft.drawCenterString("OK", w / 2, cardY + 28);
 
     // Title
     tft.setTextColor(TFT_GREEN, 0x01A0);
     tft.setTextSize(2);
-    tft.drawCenterString("ACCESS GRANTED", 120, 124);
+    tft.drawCenterString("ACCESS GRANTED", w / 2, cardY + 68);
 
     // Name Box
-    tft.fillRoundRect(16, 150, 208, 30, 6, 0x00A0);
+    tft.fillRoundRect(16, cardY + 100, w - 32, 34, 6, 0x00A0);
     tft.setTextColor(TFT_WHITE, 0x00A0);
     tft.setTextSize(2);
-    tft.drawCenterString(displayName, 120, 157);
+    tft.drawCenterString(displayName, w / 2, cardY + 108);
 
     // ID Box
     if (empId.length() > 0) {
-      tft.fillRoundRect(16, 188, 208, 28, 6, 0x00A0);
+      tft.fillRoundRect(16, cardY + 144, w - 32, 32, 6, 0x00A0);
       tft.setTextColor(TFT_CYAN, 0x00A0);
       tft.setTextSize(2);
-      tft.drawCenterString("ID: " + empId, 120, 194);
+      tft.drawCenterString("ID: " + empId, w / 2, cardY + 151);
     }
 
     // Time
     tft.setTextColor(TFT_YELLOW, 0x01A0);
     tft.setTextSize(2);
-    tft.drawCenterString("Time: " + getCurrentTime(), 120, 228);
+    tft.drawCenterString("Time: " + getCurrentTime(), w / 2, cardY + 195);
 
     // Status
     tft.setTextColor(TFT_YELLOW, 0x01A0);
-    tft.setTextSize(1);
-    tft.drawCenterString("DOOR UNLOCKED", 120, 258);
+    tft.setTextSize(2);
+    tft.drawCenterString("DOOR UNLOCKED", w / 2, cardY + 235);
 
     // Status Accent Line
-    tft.fillRoundRect(24, 280, 192, 6, 3, TFT_GREEN);
+    tft.fillRoundRect(24, cardY + 265, w - 48, 6, 3, TFT_GREEN);
   } else {
     // ======== FULL-SCREEN LANDSCAPE (320 x 240) ========
     // 1. Header
@@ -424,6 +434,20 @@ void handleRotation() {
   server.send(200, "text/plain", resp);
 }
 
+void handleInvert() {
+  bool inv = true;
+  if (server.hasArg("mode")) {
+    inv = (server.arg("mode").toInt() == 1);
+  }
+  tft.invertDisplay(inv);
+  if (activeMode) {
+    drawAccessCard(currentName, currentEmpId);
+  } else {
+    drawIdleScreen();
+  }
+  server.send(200, "text/plain", inv ? "Invert ON" : "Invert OFF");
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -460,6 +484,7 @@ void setup() {
   server.on("/unlock", handleOn);
   server.on("/open", handleOn);
   server.on("/rotation", handleRotation);
+  server.on("/invert", handleInvert);
   server.begin();
 
   enterIdle();

@@ -5,7 +5,7 @@
 #include <time.h>
 
 LGFX tft;                // LovyanGFX object
-int currentRotation = 0; // 0: Portrait (USB down), 2: Portrait (USB up), 4/6: Portrait Mirrored, 1/3/5/7: Landscape
+int currentRotation = 6; // 6: Portrait Un-mirrored (Full Screen 240x320)
 
 // ================= WIFI =================
 const char *ssid = "HitchHiker";
